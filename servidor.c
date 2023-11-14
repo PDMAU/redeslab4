@@ -19,7 +19,7 @@
 
 struct sockaddr_in servidor, cliente_info, endereco_cliente;
 socklen_t tamanho_endereco_cliente;
-
+FILE *arquivo_log;
 int Socket(int domain, int type, int protocol){
     int listen;
     if ((listen = socket(domain, type, protocol)) == -1)
@@ -31,7 +31,7 @@ int Socket(int domain, int type, int protocol){
 }
 
 // Função para lidar com um cliente conectado
-void processarCliente(int connfd, int ehTCP)
+void processarCliente(int connfd, int isTCP)
 {
     char buf[MAXDATASIZE];
     char infoCliente[BUFF_SIZE];
@@ -43,7 +43,7 @@ void processarCliente(int connfd, int ehTCP)
 
     sprintf(infoCliente, "%s:%d", bufferLocal, (int)ntohs(cliente_info.sin_port));
 
-    if (ehTCP)
+    if (isTCP)
     {
         // Enviar uma mensagem de boas-vindas para o cliente TCP
         time_t current_time;
@@ -51,7 +51,7 @@ void processarCliente(int connfd, int ehTCP)
         char *time_str = ctime(&current_time);
 
         dprintf(connfd, "Hello from server to client in:\nIP address: %s\nPort: %d\nTime: %s", bufferLocal, (int)ntohs(cliente_info.sin_port), time_str);
-        printf("TCP client connected in: %s\n", infoCliente);
+        fprintf(arquivo_log, "TCP client connected in: %s\n", infoCliente);
     }
 
     while (1)
@@ -65,16 +65,16 @@ void processarCliente(int connfd, int ehTCP)
         }
         else if (tamanhoDaMensagemRecebida == 0)
         {
-            
-            printf("%s: Conexão foi FINALIZADA\n", infoCliente);
+            printf("Conexão fechada pelo cliente\n");
+            fprintf(arquivo_log, "%s: Conexão foi FINALIZADA\n", infoCliente);
             break;
         }
 
         buf[tamanhoDaMensagemRecebida] = '\0';
-        printf("%s: %s\n", infoCliente, buf);
+        fprintf(arquivo_log, "%s: %s\n", infoCliente, buf);
 
         // Enviar uma mensagem de boas-vindas para o cliente UDP
-        if (!ehTCP)
+        if (!isTCP)
         {
             dprintf(connfd, "Hello Client UDP");
         }
@@ -90,64 +90,9 @@ void processarCliente(int connfd, int ehTCP)
     close(connfd);
 }
 
-void processarClienteUDP(int socket)
-{
-    char buf[MAXDATASIZE];
-    char infoCliente[BUFF_SIZE];
-
-    // Obtendo informações sobre o cliente
-    socklen_t len = sizeof(cliente_info);
-    if (recvfrom(socket, buf, sizeof(buf) - 1, 0, (struct sockaddr *)&cliente_info, &len) < 0)
-    {
-        perror("recvfrom error");
-        exit(1);
-    }
-
-    char bufferLocal[20];
-    inet_ntop(AF_INET, &cliente_info.sin_addr, bufferLocal, BUFF_SIZE);
-
-    sprintf(infoCliente, "%s:%d", bufferLocal, (int)ntohs(cliente_info.sin_port));
-    
-    // // Enviar uma mensagem de boas-vindas para o cliente UDP
-    // const char *mensagem = "Message from server: Hello Client UDP";
-    // if (sendto(socket, mensagem, strlen(mensagem), 0, (struct sockaddr *)&cliente_info, sizeof(cliente_info)) < 0)
-    // {
-    //     perror("Erro ao enviar mensagem para o cliente UDP");
-    //     exit(1);
-    // }
-
-    while (1)
-    {
-        // Recebendo uma mensagem do cliente
-        ssize_t tamanhoDaMensagemRecebida = recv(socket, buf, sizeof(buf) - 1, 0);
-        if (tamanhoDaMensagemRecebida < 0)
-        {
-            perror("recv error");
-            break;
-        }
-        else if (tamanhoDaMensagemRecebida == 0)
-        {
-            
-            printf("%s: Conexão foi FINALIZADA\n", infoCliente);
-            break;
-        }
-
-        buf[tamanhoDaMensagemRecebida] = '\0';
-        printf("%s: %s\n", infoCliente, buf);
-
-        // Enviar uma mensagem de boas-vindas para o cliente UDP
-        const char *resposta = "Message from server: Hello Client UDP";
-        if (sendto(socket, resposta, strlen(resposta), 0, (struct sockaddr *)&cliente_info, sizeof(cliente_info)) < 0)
-        {
-            perror("Erro ao enviar mensagem para o cliente UDP");
-            exit(1);
-        }
-    }
-}
-
-
 int main(int argc, char **argv)
-{    
+{
+    arquivo_log = fopen("log.txt", "w");
     int listenTCPfd, listenUDPfd;
     int connfd;
     pid_t childpid;
@@ -166,10 +111,18 @@ int main(int argc, char **argv)
     int portaUDP = 8888;
 
     // Criando socket TCP
-    listenTCPfd = Socket(AF_INET, SOCK_STREAM, 0);
+    if ((listenTCPfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+    {
+        perror("socket");
+        exit(1);
+    }
 
     // Criando socket UDP
-    listenUDPfd = Socket(AF_INET, SOCK_DGRAM, 0);
+    if ((listenUDPfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
+    {
+        perror("socket");
+        exit(1);
+    }
 
     // Configurando endereço do servidor
     bzero(&servidor, sizeof(servidor));
@@ -251,13 +204,20 @@ int main(int argc, char **argv)
             tamanho_endereco_cliente = sizeof(endereco_cliente);
 
             // Receber uma mensagem do cliente UDP
-           
-            processarClienteUDP(listenUDPfd);
+            if ((connfd = accept(listenUDPfd, (struct sockaddr *)NULL, NULL)) == -1)
+            {
+                perror("accept");
+                continue;
+            }
+
+            processarCliente(connfd, 0);
             close(connfd);
         }
     }
 
     close(listenTCPfd);
     close(listenUDPfd);
+    fflush(arquivo_log);
+    fclose(arquivo_log);
     return (0);
 }

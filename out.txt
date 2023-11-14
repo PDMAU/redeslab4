@@ -1,0 +1,9 @@
+Hello from server to client in:
+IP address: 192.168.1.230
+Port: 32966
+Time: Tue Nov 14 15:50:50 2023
+﻿-------------------------------
+Teste entrada stdin do cliente
+MC833
+Turma 2s 2023
+-------------------------------
