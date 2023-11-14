@@ -19,26 +19,19 @@
 
 struct sockaddr_in servidor, cliente_info, endereco_cliente;
 socklen_t tamanho_endereco_cliente;
-FILE *arquivo_log;
 
-// Função para obter uma mensagem com base em um número
-char* obterMensagem(int numeroDaMensagem){
-    if (numeroDaMensagem == 1) {
-        return "SIMULE: CPU_INTENSIVA";
+int Socket(int domain, int type, int protocol){
+    int listen;
+    if ((listen = socket(domain, type, protocol)) == -1)
+    {
+        perror("socket");
+        exit(1);
     }
-    
-    if (numeroDaMensagem == 2) {
-        return "SIMULE: MEMORIA_INTENSIVA";
-    }
-    
-    if (numeroDaMensagem == 3) {
-        return "SIMULE: GPU_INTENSIVA";
-    }
-    return "SIMULE: DISCO_INTENSIVO";
+    return listen;
 }
 
 // Função para lidar com um cliente conectado
-void processarCliente(int connfd)
+void processarCliente(int connfd, int ehTCP)
 {
     char buf[MAXDATASIZE];
     char infoCliente[BUFF_SIZE];
@@ -47,12 +40,23 @@ void processarCliente(int connfd)
     getpeername(connfd, (struct sockaddr *)&cliente_info, &tamanho_endereco_cliente);
     char bufferLocal[20];
     inet_ntop(AF_INET, &cliente_info.sin_addr, bufferLocal, BUFF_SIZE);
-    
-    sprintf(infoCliente, "%s:%d", bufferLocal,(int) ntohs(cliente_info.sin_port));
-    
+
+    sprintf(infoCliente, "%s:%d", bufferLocal, (int)ntohs(cliente_info.sin_port));
+
+    if (ehTCP)
+    {
+        // Enviar uma mensagem de boas-vindas para o cliente TCP
+        time_t current_time;
+        time(&current_time);
+        char *time_str = ctime(&current_time);
+
+        dprintf(connfd, "Hello from server to client in:\nIP address: %s\nPort: %d\nTime: %s", bufferLocal, (int)ntohs(cliente_info.sin_port), time_str);
+        printf("TCP client connected in: %s\n", infoCliente);
+    }
+
     while (1)
-    {       
-        // Recebendo uma mensagem do cliente, esperando a mensagem inicial enviada pelo cliente
+    {
+        // Recebendo uma mensagem do cliente
         ssize_t tamanhoDaMensagemRecebida = recv(connfd, buf, sizeof(buf) - 1, 0);
         if (tamanhoDaMensagemRecebida < 0)
         {
@@ -61,47 +65,97 @@ void processarCliente(int connfd)
         }
         else if (tamanhoDaMensagemRecebida == 0)
         {
-            printf("Conexão fechada pelo cliente\n");
-            fprintf(arquivo_log, "%s: Conexão foi FINALIZADA\n", infoCliente);
+            
+            printf("%s: Conexão foi FINALIZADA\n", infoCliente);
             break;
         }
 
-        if (strcmp(buf, "DESCONECTAR") == 0)
+        buf[tamanhoDaMensagemRecebida] = '\0';
+        printf("%s: %s\n", infoCliente, buf);
+
+        // Enviar uma mensagem de boas-vindas para o cliente UDP
+        if (!ehTCP)
         {
-            fprintf(arquivo_log, "%s: Conexão foi FINALIZADA\n", infoCliente);
-            break;
-        }else {
-            buf[tamanhoDaMensagemRecebida] = '\0';        
-            fprintf(arquivo_log, "%s: %s\n", infoCliente, buf);
+            dprintf(connfd, "Hello Client UDP");
         }
-        fflush(arquivo_log);
-        // Limpar o buffer
-        memset(buf, 0, sizeof(buf));
-        
-        // Enviar uma mensagem para o cliente, informando qual operacao deve ser executada
-        // utilizamos um random para escolher alguma das opçoes
-        const char *mensagem = obterMensagem(rand() % 3);
-        if (write(connfd, mensagem, strlen(mensagem)) < 0) {
+
+        // Ecoar a mensagem de volta para o cliente
+        if (write(connfd, buf, strlen(buf)) < 0)
+        {
             perror("write error");
             exit(1);
         }
-        fprintf(arquivo_log, "%s: %s\n", infoCliente, mensagem);
     }
-    
+
     close(connfd);
 }
 
-int main(int argc, char **argv)
+void processarClienteUDP(int socket)
 {
-    // Abertura de arquivo para registro de log
-    arquivo_log = fopen("log.txt", "w"); 
-    int listenTCPfd, connfd;
-    int listenUDPfd, connfd;
-    pid_t childpid;
-    char   error[MAXLINE + 1];
-    char* p;    
+    char buf[MAXDATASIZE];
+    char infoCliente[BUFF_SIZE];
 
-    if (argc != 2) {
+    // Obtendo informações sobre o cliente
+    socklen_t len = sizeof(cliente_info);
+    if (recvfrom(socket, buf, sizeof(buf) - 1, 0, (struct sockaddr *)&cliente_info, &len) < 0)
+    {
+        perror("recvfrom error");
+        exit(1);
+    }
+
+    char bufferLocal[20];
+    inet_ntop(AF_INET, &cliente_info.sin_addr, bufferLocal, BUFF_SIZE);
+
+    sprintf(infoCliente, "%s:%d", bufferLocal, (int)ntohs(cliente_info.sin_port));
+    
+    // // Enviar uma mensagem de boas-vindas para o cliente UDP
+    // const char *mensagem = "Message from server: Hello Client UDP";
+    // if (sendto(socket, mensagem, strlen(mensagem), 0, (struct sockaddr *)&cliente_info, sizeof(cliente_info)) < 0)
+    // {
+    //     perror("Erro ao enviar mensagem para o cliente UDP");
+    //     exit(1);
+    // }
+
+    while (1)
+    {
+        // Recebendo uma mensagem do cliente
+        ssize_t tamanhoDaMensagemRecebida = recv(socket, buf, sizeof(buf) - 1, 0);
+        if (tamanhoDaMensagemRecebida < 0)
+        {
+            perror("recv error");
+            break;
+        }
+        else if (tamanhoDaMensagemRecebida == 0)
+        {
+            
+            printf("%s: Conexão foi FINALIZADA\n", infoCliente);
+            break;
+        }
+
+        buf[tamanhoDaMensagemRecebida] = '\0';
+        printf("%s: %s\n", infoCliente, buf);
+
+        // Enviar uma mensagem de boas-vindas para o cliente UDP
+        const char *resposta = "Message from server: Hello Client UDP";
+        if (sendto(socket, resposta, strlen(resposta), 0, (struct sockaddr *)&cliente_info, sizeof(cliente_info)) < 0)
+        {
+            perror("Erro ao enviar mensagem para o cliente UDP");
+            exit(1);
+        }
+    }
+}
+
+
+int main(int argc, char **argv)
+{    
+    int listenTCPfd, listenUDPfd;
+    int connfd;
+    pid_t childpid;
+    char error[MAXLINE + 1];
+    char *p;
+
+    if (argc != 2)
+    {
         strcpy(error, "É necessário informar a porta que o servidor irá escutar");
         perror(error);
         exit(0);
@@ -110,20 +164,12 @@ int main(int argc, char **argv)
     long arg = strtol(argv[1], &p, 10);
     int porta = arg;
     int portaUDP = 8888;
- 
+
     // Criando socket TCP
-    if ((listenTCPfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
-    {
-        perror("socket");
-        exit(1);
-    }
+    listenTCPfd = Socket(AF_INET, SOCK_STREAM, 0);
 
     // Criando socket UDP
-    if ((listenUDPfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
-    {
-        perror("socket");
-        exit(1);
-    }
+    listenUDPfd = Socket(AF_INET, SOCK_DGRAM, 0);
 
     // Configurando endereço do servidor
     bzero(&servidor, sizeof(servidor));
@@ -131,8 +177,21 @@ int main(int argc, char **argv)
     servidor.sin_addr.s_addr = htonl(INADDR_ANY);
     servidor.sin_port = htons(porta);
 
-    // Associação do socket com o endereço do servidor TCP
+    // Associação do socket TCP com o endereço do servidor
     if (bind(listenTCPfd, (struct sockaddr *)&servidor, sizeof(servidor)) == -1)
+    {
+        perror("bind");
+        exit(1);
+    }
+
+    // Configurando endereço do servidor UDP
+    bzero(&servidor, sizeof(servidor));
+    servidor.sin_family = AF_INET;
+    servidor.sin_addr.s_addr = htonl(INADDR_ANY);
+    servidor.sin_port = htons(portaUDP);
+
+    // Associação do socket UDP com o endereço do servidor
+    if (bind(listenUDPfd, (struct sockaddr *)&servidor, sizeof(servidor)) == -1)
     {
         perror("bind");
         exit(1);
@@ -145,29 +204,60 @@ int main(int argc, char **argv)
         exit(1);
     }
 
+    fd_set readfds;
+    int maxfd;
+
     for (;;)
     {
-        tamanho_endereco_cliente = sizeof(endereco_cliente);
-        // Aceitando uma conexão do cliente
-        if ((connfd = accept(listenTCPfd, (struct sockaddr *)NULL, NULL)) == -1) 
-            { //check se for TCP: perror("accept");
-                for(int i = 0; i < FD_SETSIZE; i++) { //3 clientes consecutivos
-                    
-                }
+        FD_ZERO(&readfds);
+
+        FD_SET(listenTCPfd, &readfds);
+        FD_SET(listenUDPfd, &readfds);
+
+        maxfd = (listenTCPfd > listenUDPfd) ? listenTCPfd : listenUDPfd;
+
+        // Monitorar os descritores de leitura usando select
+        if (select(maxfd + 1, &readfds, NULL, NULL, NULL) == -1)
+        {
+            perror("select");
+            exit(1);
+        }
+
+        // Verificar se há uma conexão TCP pendente
+        if (FD_ISSET(listenTCPfd, &readfds))
+        {
+            tamanho_endereco_cliente = sizeof(endereco_cliente);
+
+            // Aceitar uma conexão do cliente TCP
+            if ((connfd = accept(listenTCPfd, (struct sockaddr *)NULL, NULL)) == -1)
+            {
+                perror("accept");
+                continue;
             }
 
             if ((childpid = fork()) == 0)
-            {                          
-                close(listenTCPfd);       
-                processarCliente(connfd); 
-                exit(0);              
+            {
+                close(listenTCPfd);
+                processarCliente(connfd, 1);
+                exit(0);
             }
 
-            close(connfd); 
+            close(connfd);
+        }
+
+        // Verificar se há dados disponíveis no socket UDP
+        if (FD_ISSET(listenUDPfd, &readfds))
+        {
+            tamanho_endereco_cliente = sizeof(endereco_cliente);
+
+            // Receber uma mensagem do cliente UDP
+           
+            processarClienteUDP(listenUDPfd);
+            close(connfd);
+        }
     }
 
     close(listenTCPfd);
-    fflush(arquivo_log);
-    fclose(arquivo_log);
+    close(listenUDPfd);
     return (0);
 }
