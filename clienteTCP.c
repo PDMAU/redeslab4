@@ -89,18 +89,10 @@ int main(int argc, char **argv)
         perror("Erro ao abrir o arquivo de entrada");
         exit(1);
     }
-
-    // Abre o arquivo de saída "out.txt" para escrita
-    FILE *arquivoSaida = fopen("out.txt", "w");
-    if (arquivoSaida == NULL)
-    {
-        perror("Erro ao abrir o arquivo de saída");
-        fclose(arquivoEntrada);
-        exit(1);
-    }
-
+    
     fd_set readfds, writefds;
     int maxfd;
+    int nready;
 
     while (1)
     {
@@ -119,7 +111,8 @@ int main(int argc, char **argv)
         maxfd = (maxfd > fileno(arquivoEntrada)) ? maxfd : fileno(arquivoEntrada);
 
         // Verifica se há dados prontos para leitura ou escrita
-        if (select(maxfd + 1, &readfds, &writefds, NULL, NULL) == -1)
+        nready = select(maxfd + 1, &readfds, &writefds, NULL, NULL);
+        if ( nready == -1)
         {
             perror("select");
             break;
@@ -133,8 +126,7 @@ int main(int argc, char **argv)
                 if (write(sockfd, recvline, strlen(recvline)) < 0)
                 {
                     perror("Erro ao escrever para o servidor");
-                    fclose(arquivoEntrada);
-                    fclose(arquivoSaida);
+                    fclose(arquivoEntrada);                    
                     exit(1);
                 }
             }
@@ -146,27 +138,28 @@ int main(int argc, char **argv)
             if ((n = read(sockfd, recvline, MAXLINE)) > 0)
             {
                 recvline[n] = 0;
-                fprintf(arquivoSaida, "%s", recvline);
+                printf("%s", recvline);
             }
-            else if (n == 0)
+            else if (n <= 0)
             {
                 // Servidor fechou a conexão
                 printf("Conexão fechada pelo servidor\n");
+                break;                
+            }
+            else if (--nready <= 0){
                 break;
             }
             else
             {
                 perror("Erro ao ler do servidor");
-                fclose(arquivoEntrada);
-                fclose(arquivoSaida);
+                fclose(arquivoEntrada);                
                 exit(1);
             }
         }
     }
 
-    // Fecha os arquivos
+    // Fecha o arquivo de entrada
     fclose(arquivoEntrada);
-    fclose(arquivoSaida);
 
     // Encerra a conexão após receber a resposta completa do servidor
     shutdown(sockfd, SHUT_RDWR);

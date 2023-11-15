@@ -7,6 +7,16 @@
 #define MAXLINE 4096
 #define BUFF_SIZE 100
 
+int Socket(int domain, int type, int protocol){
+    int listen;
+    if ((listen = socket(domain, type, protocol)) == -1)
+    {
+        perror("socket");
+        exit(1);
+    }
+    return listen;
+}
+
 int main(int argc, char **argv)
 {
     if (argc != 3)
@@ -20,11 +30,7 @@ int main(int argc, char **argv)
     struct sockaddr_in servidor;
 
     // Cria um socket UDP
-    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
-    {
-        perror("Erro de socket");
-        exit(1);
-    }
+    sockfd = Socket(AF_INET, SOCK_DGRAM, 0);    
 
     // Configura o endereço do servidor
     bzero(&servidor, sizeof(servidor));

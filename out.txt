@@ -1,9 +1,12 @@
+Cliente Local: 143.106.16.9:48528
+Servidor: 143.106.16.9:8090
 Hello from server to client in:
-IP address: 192.168.1.230
-Port: 32966
-Time: Tue Nov 14 15:50:50 2023
+IP address: 143.106.16.9
+Port: 48528
+Time: Tue Nov 14 20:59:51 2023
 ﻿-------------------------------
 Teste entrada stdin do cliente
 MC833
 Turma 2s 2023
 -------------------------------
+Conexão fechada pelo servidor

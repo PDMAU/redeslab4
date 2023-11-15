@@ -1,0 +1,9 @@
+TCP client connected in: 143.106.16.9:46350
+143.106.16.9:46350: ﻿-------------------------------
+Teste entrada stdin do cliente
+MC833
+Turma 2s 2023
+---------
+143.106.16.9:46350: ----------------------
+
+143.106.16.9:46350: Conexão foi FINALIZADA
